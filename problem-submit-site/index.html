@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Problem Submit</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .submit-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: inherit;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .problem-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .problem-card {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .problem-content {
+            flex-grow: 1;
+            margin-right: 20px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .vote-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 50px;
+        }
+        .vote-btn {
+            background: none;
+            border: 1px solid #ddd;
+            color: #7f8c8d;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .vote-btn:hover {
+            background-color: #f1f2f6;
+            color: #e67e22;
+            border-color: #e67e22;
+        }
+        .vote-btn.voted {
+            color: #e67e22;
+            border-color: #e67e22;
+            background-color: #fef5e7;
+        }
+        .vote-count {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 5px;
+            color: #2c3e50;
+        }
+        .loading {
+            text-align: center;
+            color: #7f8c8d;
+        }
+        .empty-state {
+            text-align: center;
+            color: #7f8c8d;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>Submit a Problem</h1>
+    
+    <div class="submit-container">
+        <textarea id="problemInput" placeholder="Describe the problem you are facing..."></textarea>
+        <button id="submitBtn" onclick="submitProblem()">Submit Problem</button>
+    </div>
+
+    <div id="problemList" class="problem-list">
+        <div class="loading">Loading problems...</div>
+    </div>
+
+    <script>
+        // Store IDs of problems the user has voted for in this session
+        const votedProblems = new Set(JSON.parse(localStorage.getItem('votedProblems') || '[]'));
+
+        // Function to load problems from server
+        async function loadProblems() {
+            try {
+                const response = await fetch('/api/problems');
+                if (!response.ok) throw new Error('Failed to fetch');
+                const problems = await response.json();
+                renderProblems(problems);
+            } catch (error) {
+                console.error('Error loading problems:', error);
+            }
+        }
+
+        // Function to render problems to DOM
+        function renderProblems(problems) {
+            const container = document.getElementById('problemList');
+            
+            if (problems.length === 0) {
+                container.innerHTML = '<div class="empty-state">No problems submitted yet. Be the first!</div>';
+                return;
+            }
+
+            container.innerHTML = problems.map(prob => `
+                <div class="problem-card">
+                    <div class="problem-content">${escapeHtml(prob.content)}</div>
+                    <div class="vote-container">
+                        <button class="vote-btn ${votedProblems.has(prob.id) ? 'voted' : ''}" 
+                                onclick="vote(${prob.id})" 
+                                ${votedProblems.has(prob.id) ? 'disabled' : ''}>
+                            ▲
+                            <span class="vote-count">${prob.votes}</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Function to submit a new problem
+        async function submitProblem() {
+            const input = document.getElementById('problemInput');
+            const btn = document.getElementById('submitBtn');
+            const content = input.value.trim();
+
+            if (!content) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                const response = await fetch('/api/problems', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+
+                if (response.ok) {
+                    input.value = '';
+                    await loadProblems();
+                } else {
+                    alert('Failed to submit problem');
+                }
+            } catch (error) {
+                console.error('Error submitting:', error);
+                alert('An error occurred while submitting');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Problem';
+            }
+        }
+
+        // Function to upvote a problem
+        async function vote(id) {
+            if (votedProblems.has(id)) return;
+
+            // Optimistic UI update
+            votedProblems.add(id);
+            localStorage.setItem('votedProblems', JSON.stringify([...votedProblems]));
+            
+            // Re-render to show disabled state immediately
+            const buttons = document.querySelectorAll('.vote-btn');
+            // Complete reload to get fresh counts
+            await loadProblems();
+
+            try {
+                const response = await fetch('/api/vote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+
+                if (!response.ok) {
+                    // Revert on failure
+                    votedProblems.delete(id);
+                    localStorage.setItem('votedProblems', JSON.stringify([...votedProblems]));
+                    alert('Failed to register vote');
+                }
+                
+                await loadProblems();
+            } catch (error) {
+                console.error('Error voting:', error);
+                votedProblems.delete(id);
+                localStorage.setItem('votedProblems', JSON.stringify([...votedProblems]));
+            }
+        }
+
+        // Helper to prevent XSS
+        function escapeHtml(unsafe) {
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        // Initial load
+        loadProblems();
+
+        // Poll for updates every 2 seconds
+        setInterval(loadProblems, 2000);
+    </script>
+</body>
+</html>
